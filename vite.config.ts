@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 const config = defineConfig({
   server: {
     host: true,
-    allowedHosts: ['86eb2b00fa3f.ngrok-free.app'],
+    allowedHosts: ['a769f05c4766.ngrok-free.app'],
   },
   plugins: [
     // this is the plugin that enables path aliases

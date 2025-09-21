@@ -55,6 +55,44 @@ export const getPlaylist = createServerFn({ method: 'GET' }).handler(
   },
 )
 
+// Paginated tracks for large playlists
+export const getPlaylistTracksPage = createServerFn({ method: 'GET' })
+  .validator((body: { id: string; offset?: number; limit?: number }) => body)
+  .handler(async ({ data }) => {
+    const session = await getAccessTokenFromSession()
+    if (!session) {
+      return { ok: false as const, status: 401, message: 'Not authenticated' }
+    }
+    const id = data.id
+    const limit = Math.max(1, Math.min(100, data.limit ?? 100))
+    const offset = Math.max(0, data.offset ?? 0)
+    const url = new URL(
+      `https://api.spotify.com/v1/playlists/${encodeURIComponent(id)}/tracks`,
+    )
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('offset', String(offset))
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    })
+    if (!res.ok) {
+      return {
+        ok: false as const,
+        status: res.status,
+        message: 'Failed to load playlist tracks',
+      }
+    }
+    const json = await res.json()
+    return {
+      ok: true as const,
+      status: 200,
+      items: (json?.items ?? []) as any[],
+      next: (json?.next as string | null) ?? null,
+      total: (json?.total as number | undefined) ?? undefined,
+      limit,
+      offset,
+    }
+  })
+
 export const addTracksToPlaylist = createServerFn({ method: 'POST' })
   .validator((body: { playlistId: string; uris: string[] }) => body)
   .handler(async ({ data }) => {

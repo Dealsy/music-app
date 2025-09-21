@@ -21,6 +21,7 @@ import { Route as PlaylistsIdRouteImport } from './routes/playlists.$id'
 import { Route as CollectionsIdRouteImport } from './routes/collections.$id'
 import { ServerRoute as AuthSpotifyServerRouteImport } from './routes/auth.spotify'
 import { ServerRoute as AuthSessionServerRouteImport } from './routes/auth.session'
+import { ServerRoute as AuthLogoutServerRouteImport } from './routes/auth.logout'
 import { ServerRoute as ApiCollectionsServerRouteImport } from './routes/api.collections'
 import { ServerRoute as AuthSpotifyCallbackServerRouteImport } from './routes/auth.spotify.callback'
 import { ServerRoute as ApiCollectionsIdServerRouteImport } from './routes/api.collections.$id'
@@ -76,6 +77,11 @@ const AuthSpotifyServerRoute = AuthSpotifyServerRouteImport.update({
 const AuthSessionServerRoute = AuthSessionServerRouteImport.update({
   id: '/auth/session',
   path: '/auth/session',
+  getParentRoute: () => rootServerRouteImport,
+} as any)
+const AuthLogoutServerRoute = AuthLogoutServerRouteImport.update({
+  id: '/auth/logout',
+  path: '/auth/logout',
   getParentRoute: () => rootServerRouteImport,
 } as any)
 const ApiCollectionsServerRoute = ApiCollectionsServerRouteImport.update({
@@ -177,6 +183,7 @@ export interface RootRouteChildren {
 }
 export interface FileServerRoutesByFullPath {
   '/api/collections': typeof ApiCollectionsServerRouteWithChildren
+  '/auth/logout': typeof AuthLogoutServerRoute
   '/auth/session': typeof AuthSessionServerRoute
   '/auth/spotify': typeof AuthSpotifyServerRouteWithChildren
   '/api/collections/$id': typeof ApiCollectionsIdServerRouteWithChildren
@@ -185,6 +192,7 @@ export interface FileServerRoutesByFullPath {
 }
 export interface FileServerRoutesByTo {
   '/api/collections': typeof ApiCollectionsServerRouteWithChildren
+  '/auth/logout': typeof AuthLogoutServerRoute
   '/auth/session': typeof AuthSessionServerRoute
   '/auth/spotify': typeof AuthSpotifyServerRouteWithChildren
   '/api/collections/$id': typeof ApiCollectionsIdServerRouteWithChildren
@@ -194,6 +202,7 @@ export interface FileServerRoutesByTo {
 export interface FileServerRoutesById {
   __root__: typeof rootServerRouteImport
   '/api/collections': typeof ApiCollectionsServerRouteWithChildren
+  '/auth/logout': typeof AuthLogoutServerRoute
   '/auth/session': typeof AuthSessionServerRoute
   '/auth/spotify': typeof AuthSpotifyServerRouteWithChildren
   '/api/collections/$id': typeof ApiCollectionsIdServerRouteWithChildren
@@ -204,6 +213,7 @@ export interface FileServerRouteTypes {
   fileServerRoutesByFullPath: FileServerRoutesByFullPath
   fullPaths:
     | '/api/collections'
+    | '/auth/logout'
     | '/auth/session'
     | '/auth/spotify'
     | '/api/collections/$id'
@@ -212,6 +222,7 @@ export interface FileServerRouteTypes {
   fileServerRoutesByTo: FileServerRoutesByTo
   to:
     | '/api/collections'
+    | '/auth/logout'
     | '/auth/session'
     | '/auth/spotify'
     | '/api/collections/$id'
@@ -220,6 +231,7 @@ export interface FileServerRouteTypes {
   id:
     | '__root__'
     | '/api/collections'
+    | '/auth/logout'
     | '/auth/session'
     | '/auth/spotify'
     | '/api/collections/$id'
@@ -229,6 +241,7 @@ export interface FileServerRouteTypes {
 }
 export interface RootServerRouteChildren {
   ApiCollectionsServerRoute: typeof ApiCollectionsServerRouteWithChildren
+  AuthLogoutServerRoute: typeof AuthLogoutServerRoute
   AuthSessionServerRoute: typeof AuthSessionServerRoute
   AuthSpotifyServerRoute: typeof AuthSpotifyServerRouteWithChildren
 }
@@ -307,6 +320,13 @@ declare module '@tanstack/react-start/server' {
       path: '/auth/session'
       fullPath: '/auth/session'
       preLoaderRoute: typeof AuthSessionServerRouteImport
+      parentRoute: typeof rootServerRouteImport
+    }
+    '/auth/logout': {
+      id: '/auth/logout'
+      path: '/auth/logout'
+      fullPath: '/auth/logout'
+      preLoaderRoute: typeof AuthLogoutServerRouteImport
       parentRoute: typeof rootServerRouteImport
     }
     '/api/collections': {
@@ -391,6 +411,7 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 const rootServerRouteChildren: RootServerRouteChildren = {
   ApiCollectionsServerRoute: ApiCollectionsServerRouteWithChildren,
+  AuthLogoutServerRoute: AuthLogoutServerRoute,
   AuthSessionServerRoute: AuthSessionServerRoute,
   AuthSpotifyServerRoute: AuthSpotifyServerRouteWithChildren,
 }

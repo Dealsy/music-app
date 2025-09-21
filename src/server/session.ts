@@ -48,3 +48,8 @@ export async function getUserIdFromSession(): Promise<string | null> {
   const session = await convex.query(api.sessions.getSession, { sessionId })
   return session ? (session.userId as unknown as string) : null
 }
+
+export async function isAuthenticated(): Promise<boolean> {
+  const id = await getUserIdFromSession()
+  return Boolean(id)
+}

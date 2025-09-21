@@ -2,6 +2,7 @@ import {
   HeadContent,
   Scripts,
   createRootRouteWithContext,
+  redirect,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanstackDevtools } from '@tanstack/react-devtools'
@@ -20,6 +21,7 @@ import {
   SidebarInset,
 } from '@/components/ui/sidebar'
 import { Link, useRouterState } from '@tanstack/react-router'
+import { unstable_ViewTransition as ViewTransition } from 'react'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -28,10 +30,16 @@ import ConvexProvider from '../integrations/convex/provider'
 import appCss from '../styles.css?url'
 
 import type { QueryClient } from '@tanstack/react-query'
+import { createServerFn } from '@tanstack/react-start'
+import { isAuthenticated } from '../server/session'
 
 interface MyRouterContext {
   queryClient: QueryClient
 }
+
+const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
+  return { ok: await isAuthenticated() }
+})
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: () => ({
@@ -54,7 +62,22 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
     ],
   }),
-
+  beforeLoad: async ({ location }) => {
+    // Allow auth routes and public assets without guard
+    const publicPaths = [
+      '/auth/spotify',
+      '/auth/spotify/callback',
+      '/auth/session',
+      '/auth/logout',
+      '/profile',
+    ]
+    if (publicPaths.includes(location.pathname)) return
+    const { ok } = await getAuth()
+    if (!ok) {
+      const from = `${location.pathname}${location.search || ''}`
+      throw redirect({ to: '/profile', search: { from } })
+    }
+  },
   shellComponent: RootDocument,
 })
 
@@ -74,7 +97,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </Sidebar>
             <SidebarInset>
               <Header />
-              {children}
+              <ViewTransition>{children}</ViewTransition>
               <FooterPlayer />
             </SidebarInset>
           </SidebarProvider>
@@ -111,16 +134,9 @@ function AppSidebarContent() {
           </Link>
         </SidebarMenuItem>
         <SidebarMenuItem>
-          <Link to="/playlists">
+          <Link to="/playlists" preload="intent">
             <SidebarMenuButton isActive={isActive('/playlists')}>
               Playlists
-            </SidebarMenuButton>
-          </Link>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <Link to="/profile">
-            <SidebarMenuButton isActive={isActive('/profile')}>
-              Profile
             </SidebarMenuButton>
           </Link>
         </SidebarMenuItem>

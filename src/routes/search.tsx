@@ -1,5 +1,6 @@
 import {
   createFileRoute,
+  Link,
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router'
@@ -63,7 +64,7 @@ function SearchPage() {
         data: { q: data.q, type: 'track,artist,album' },
       })
       if (!r.ok) throw new Error('Search failed')
-      return r.results as any
+      return r.results
     },
   })
 

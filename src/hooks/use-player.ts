@@ -125,35 +125,33 @@ export default function usePlayer() {
       if (!r.ok) return null
       return r.state as PlaybackState
     },
-    refetchInterval: false,
+    // Poll every second while playing, regardless of device
+    refetchInterval: (q) =>
+      (q.state.data as PlaybackState | null)?.is_playing ? 1000 : false,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
   })
 
-  // Manual polling only when playing on a non-SDK device
-  const shouldPoll = useMemo(() => {
-    const isPlaying = Boolean(stateQ.data?.is_playing)
-    if (!isPlaying) return false
-    const activeIdFromDevices = (devicesQ.data ?? []).find(
-      (d: any) => d.is_active,
-    )?.id as string | undefined
-    const activeIdFromState = (stateQ.data as any)?.device?.id as
-      | string
-      | undefined
-    const isSdkActive = Boolean(
-      sdkDeviceId &&
-        (activeIdFromDevices === sdkDeviceId ||
-          activeIdFromState === sdkDeviceId),
-    )
-    return !isSdkActive
-  }, [stateQ.data?.is_playing, stateQ.data?.device, devicesQ.data, sdkDeviceId])
-
+  // Smooth progress updates when SDK is active to avoid double updates with server polling.
   useEffect(() => {
-    if (!shouldPoll) return
+    const isSdkActive = (() => {
+      const devices = devicesQ.data ?? []
+      const active = devices.find((d: any) => d.is_active)
+      return Boolean(sdkDeviceId && active?.id === sdkDeviceId)
+    })()
+    if (!isSdkActive || !stateQ.data?.is_playing) return
     const id = setInterval(() => {
-      stateQ.refetch()
+      const prev = qc.getQueryData(['player-state']) as any
+      if (!prev) return
+      const duration = prev?.item?.duration_ms ?? Number.POSITIVE_INFINITY
+      const current = Math.max(
+        0,
+        Math.min(duration, (prev.progress_ms ?? 0) + 1000),
+      )
+      qc.setQueryData(['player-state'], { ...prev, progress_ms: current })
     }, 1000)
     return () => clearInterval(id)
-  }, [shouldPoll, stateQ])
+  }, [devicesQ.data, sdkDeviceId, stateQ.data?.is_playing, qc])
 
   const sdkActive = useMemo(() => {
     const devices = devicesQ.data ?? []

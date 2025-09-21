@@ -27,3 +27,19 @@ export const getSession = query({
       .unique()
   },
 })
+
+export const deleteBySessionId = mutation({
+  args: { sessionId: v.string() },
+  handler: async (ctx, { sessionId }) => {
+    const row = await ctx.db
+      .query('sessions')
+      .withIndex('sessionId', (q) => q.eq('sessionId', sessionId))
+      .unique()
+      .catch(() => null)
+    if (row) {
+      await ctx.db.delete(row._id)
+      return true
+    }
+    return false
+  },
+})

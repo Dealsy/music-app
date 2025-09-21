@@ -14,45 +14,38 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useState } from 'react'
-import {
-  playContext,
-  pausePlayback,
-  startResumePlayback,
-} from '../server/spotify-player'
+import { unstable_ViewTransition as ViewTransition } from 'react'
 import usePlayer from '@/hooks/use-player'
-import { transferPlayback } from '../server/spotify-player'
+import usePlaylistControls from '@/hooks/use-playlist-controls'
+import useInfinitePlaylistTracks from '@/hooks/use-infinite-playlist-tracks'
 
 export const Route = createFileRoute('/playlists/$id')({
-  loader: async ({ params }) => {
-    const r = await (getPlaylist as any)({ data: { id: params.id as string } })
-    if (!r.ok) return { playlist: null, tracks: null, error: r.message }
-    return { playlist: r.playlist, tracks: r.tracks }
-  },
+  pendingMs: 0,
+  pendingComponent: () => (
+    <div className="p-6">
+      <div className="text-2xl font-semibold mb-2">Playlist</div>
+      <div className="grid gap-2">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 rounded" />
+        ))}
+      </div>
+    </div>
+  ),
   component: PlaylistDetail,
 })
 
 function PlaylistDetail() {
-  const data = Route.useLoaderData() as any
+  const { id } = Route.useParams()
   const qc = useQueryClient()
-
-  if (!data?.playlist) {
-    return (
-      <div className="p-6">
-        {data?.error ? (
-          <div className="text-red-500">{data.error}</div>
-        ) : (
-          <div className="grid gap-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 rounded" />
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const p = data.playlist
-  const tracks = data.tracks?.items ?? []
+  const playlistQ = useQuery({
+    queryKey: ['spotify-playlist', id],
+    queryFn: async () => {
+      const r = await (getPlaylist as any)({ data: { id } })
+      if (!r.ok) return null as unknown as { playlist: any; tracks: any } | null
+      return { playlist: r.playlist, tracks: r.tracks }
+    },
+  })
+  // Ensure all hooks are called unconditionally and in the same order
   const collectionsQ = useQuery({
     queryKey: ['collections-list'],
     queryFn: async () => fetch('/api/collections').then((r) => r.json()),
@@ -60,56 +53,16 @@ function PlaylistDetail() {
   // Use global player state from footer hook to avoid duplicate polling
   const player = usePlayer()
   const playerQ = player.stateQ as any
-  const handlePlayPauseClick = (trackUri?: string, index?: number) => {
-    const isCurrent = playerQ.data?.item?.uri === trackUri
-    const isPlaying = Boolean(playerQ.data?.is_playing)
-    if (isCurrent && isPlaying) {
-      pauseMut.mutate()
-    } else if (isCurrent && !isPlaying) {
-      resumeMut.mutate()
-    } else if (typeof index === 'number') {
-      playMut.mutate(index)
-    }
-  }
-  const pauseMut = useMutation({
-    mutationFn: async () => {
-      const r = await pausePlayback()
-      if (!r.ok) throw new Error(r.message)
-      return r
-    },
-    onSettled: () => playerQ.refetch(),
+
+  const controls = usePlaylistControls({
+    playlistId: id,
+    playlistUri: playlistQ.data?.playlist?.uri,
+    tracks: (playlistQ.data?.tracks?.items as any[]) ?? [],
   })
-  const resumeMut = useMutation({
-    mutationFn: async () => {
-      const r = await startResumePlayback()
-      if (!r.ok) throw new Error(r.message)
-      return r
-    },
-    onSettled: () => playerQ.refetch(),
-  })
-  const playMut = useMutation({
-    mutationFn: async (index: number) => {
-      // Ensure there is an active device before starting context playback
-      const devices = (player.devicesQ.data as any[]) ?? []
-      const active = devices.find((d) => d.is_active)
-      if (!active) {
-        const deviceId = player.sdkDeviceId || devices[0]?.id
-        if (deviceId) {
-          await transferPlayback({ data: { deviceId, play: false } })
-        }
-      }
-      const r = await playContext({
-        data: {
-          contextUri:
-            data.playlist?.uri ?? `spotify:playlist:${data.playlist.id}`,
-          offset: { position: index },
-        },
-      })
-      if (!r.ok) throw new Error(r.message)
-      return r
-    },
-    onSettled: () => playerQ.refetch(),
-  })
+
+  const handlePlayPauseClick = controls.handlePlayPauseClick
+
+  const { tracksQ, tracks, sentinelRef } = useInfinitePlaylistTracks(id)
 
   const formatMs = (ms: number) => {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000))
@@ -119,29 +72,47 @@ function PlaylistDetail() {
   }
   const removeMutation = useMutation({
     mutationFn: async (uri: string) => {
+      const pid = playlistQ.data?.playlist?.id
+      if (!pid) throw new Error('Playlist not ready')
       const r = await removeTrackFromPlaylist({
-        data: { playlistId: data.playlist.id, uri },
+        data: { playlistId: pid, uri },
       })
       if (!r.ok) throw new Error(r.message)
       return r
     },
     onMutate: async (uri) => {
       // optimistic UI: remove locally
-      const prev = { ...data }
-      const idx = tracks.findIndex((t: any) => t.track?.uri === uri)
-      if (idx >= 0) tracks.splice(idx, 1)
-      return { prev }
+      const list = (playlistQ.data?.tracks?.items as any[]) ?? []
+      const idx = list.findIndex((t: any) => t.track?.uri === uri)
+      if (idx >= 0) list.splice(idx, 1)
+      return { prevTracks: list }
     },
     onError: (_e, _v) => {
       // could revalidate
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['spotify-playlist', data.playlist.id] })
+      qc.invalidateQueries({ queryKey: ['spotify-playlist', id] })
     },
   })
+
+  if (!playlistQ.data) {
+    return (
+      <div className="p-6">
+        <div className="grid gap-2">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 rounded" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const p = playlistQ.data.playlist
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-2">{p.name}</h1>
+      <ViewTransition name={`playlist-${p.id}`}>
+        <h1 className="text-2xl font-semibold mb-2">{p.name}</h1>
+      </ViewTransition>
       <div className="text-sm opacity-80 mb-4">{p.description}</div>
       <div className="grid gap-2">
         {tracks.map((t: any, idx: number) => {
@@ -225,6 +196,14 @@ function PlaylistDetail() {
             </div>
           )
         })}
+        <div ref={sentinelRef} />
+        {tracksQ.isFetchingNextPage && (
+          <div className="grid gap-2 mt-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={`more-${i}`} className="h-12 rounded" />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
