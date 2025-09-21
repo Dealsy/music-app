@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const Route = createFileRoute('/collections/$id')({
   component: CollectionDetail,
@@ -20,6 +21,13 @@ function CollectionDetail() {
     <div className="p-6 grid gap-3">
       <h1 className="text-2xl font-semibold">Collection</h1>
       <div className="grid gap-2">
+        {!itemsQ.data && (
+          <>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 rounded" />
+            ))}
+          </>
+        )}
         {itemsQ.data?.map?.((i: any) => (
           <div
             key={i._id}

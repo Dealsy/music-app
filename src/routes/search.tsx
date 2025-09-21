@@ -17,6 +17,9 @@ import {
 } from '@/components/ui/select'
 import { searchSpotify } from '../server/spotify-search'
 import { Skeleton } from '@/components/ui/skeleton'
+import usePlayer from '@/hooks/use-player'
+import { listPlaylists, addTracksToPlaylist } from '../server/spotify-playlists'
+import { Play } from 'lucide-react'
 
 export const Route = createFileRoute('/search')({
   loader: async ({ location }) => {
@@ -209,8 +212,18 @@ function Results({
   )
 }
 
-function TrackRow({ track, collections }: { track: any; collections: any[] }) {
+function TrackRow({ track }: { track: any; collections: any[] }) {
   const [selectedId, setSelectedId] = useState<string>('')
+  const player = usePlayer()
+  const playlistsQ = useQuery({
+    queryKey: ['spotify-playlists-min'],
+    queryFn: async () => {
+      const r = await listPlaylists()
+      if (!r.ok) return { items: [] as any[] }
+      return r.playlists as any
+    },
+    staleTime: 60_000,
+  })
   return (
     <div className="p-3 border rounded flex items-center justify-between gap-3">
       <div>
@@ -219,39 +232,48 @@ function TrackRow({ track, collections }: { track: any; collections: any[] }) {
           {track.artists?.map((a: any) => a.name).join(', ')}
         </div>
       </div>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault()
-          if (!selectedId) return
-          await fetch(`/api/collections/${selectedId}/items`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackId: track.id, trackUri: track.uri }),
-          })
-        }}
-        className="flex items-center gap-2"
-      >
-        <Select onValueChange={(v) => setSelectedId(v)}>
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="Add to collection" />
-          </SelectTrigger>
-          <SelectContent>
-            {(collections || []).map((c: any) => (
-              <SelectItem key={c._id} value={c._id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center gap-2">
         <Button
-          type="submit"
           size="sm"
           variant="outline"
-          disabled={!selectedId}
+          className="rounded-full w-8 h-8"
+          onClick={() => player.play([track.uri])}
         >
-          Add
+          <Play />
         </Button>
-      </form>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (!selectedId) return
+            const r = await addTracksToPlaylist({
+              data: { playlistId: selectedId, uris: [track.uri] },
+            })
+            if (!r.ok) alert('Failed to add to playlist')
+          }}
+          className="flex items-center gap-2"
+        >
+          <Select onValueChange={(v) => setSelectedId(v)}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Add to Spotify playlist" />
+            </SelectTrigger>
+            <SelectContent>
+              {(playlistsQ.data?.items ?? []).map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={!selectedId}
+          >
+            Add
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }

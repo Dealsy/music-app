@@ -7,6 +7,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanstackDevtools } from '@tanstack/react-devtools'
 
 import Header from '../components/Header'
+import FooterPlayer from '@/components/FooterPlayer'
 import {
   SidebarProvider,
   Sidebar,
@@ -63,7 +64,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="pb-20">
         <ConvexProvider>
           <SidebarProvider>
             <Sidebar>
@@ -74,6 +75,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <SidebarInset>
               <Header />
               {children}
+              <FooterPlayer />
             </SidebarInset>
           </SidebarProvider>
           <TanstackDevtools
@@ -126,13 +128,6 @@ function AppSidebarContent() {
           <Link to="/search">
             <SidebarMenuButton isActive={isActive('/search')}>
               Search
-            </SidebarMenuButton>
-          </Link>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <Link to="/player">
-            <SidebarMenuButton isActive={isActive('/player')}>
-              Player
             </SidebarMenuButton>
           </Link>
         </SidebarMenuItem>

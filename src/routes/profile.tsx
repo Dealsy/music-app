@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouterState } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import { getConvexClient } from '../server/convexClient'
@@ -50,6 +50,16 @@ function Profile() {
   const data = Route.useLoaderData() as
     | { authenticated: false }
     | { authenticated: true; me: any }
+  const isLoading = useRouterState({ select: (s) => s.isLoading })
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold mb-2">Profile</h1>
+        <p className="opacity-70">Loading…</p>
+      </div>
+    )
+  }
 
   if (!('authenticated' in data) || data.authenticated === false) {
     return (

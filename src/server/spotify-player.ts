@@ -20,14 +20,31 @@ async function authFetch(path: string, init?: RequestInit) {
 export const getPlaybackState = createServerFn({ method: 'GET' }).handler(
   async () => {
     const { res } = await authFetch('/me/player')
-    if (!res || !res.ok) {
+    if (!res) {
       return {
         ok: false as const,
-        status: res?.status ?? 500,
+        status: 500,
         message: 'Failed to get playback state',
       }
     }
-    const json = await res.json()
+    // Spotify returns 204 No Content when there is no active device or playback
+    if (res.status === 204) {
+      return { ok: true as const, status: 204, state: null }
+    }
+    if (!res.ok) {
+      return {
+        ok: false as const,
+        status: res.status ?? 500,
+        message: 'Failed to get playback state',
+      }
+    }
+    let json: any = null
+    try {
+      json = await res.json()
+    } catch {
+      // Defensive: treat empty body as no state
+      json = null
+    }
     return { ok: true as const, status: 200, state: json }
   },
 )
@@ -35,14 +52,29 @@ export const getPlaybackState = createServerFn({ method: 'GET' }).handler(
 export const getDevices = createServerFn({ method: 'GET' }).handler(
   async () => {
     const { res } = await authFetch('/me/player/devices')
-    if (!res || !res.ok) {
+    if (!res) {
       return {
         ok: false as const,
-        status: res?.status ?? 500,
+        status: 500,
         message: 'Failed to get devices',
       }
     }
-    const json = await res.json()
+    if (res.status === 204) {
+      return { ok: true as const, status: 204, devices: { devices: [] } }
+    }
+    if (!res.ok) {
+      return {
+        ok: false as const,
+        status: res.status ?? 500,
+        message: 'Failed to get devices',
+      }
+    }
+    let json: any = null
+    try {
+      json = await res.json()
+    } catch {
+      json = { devices: [] }
+    }
     return { ok: true as const, status: 200, devices: json }
   },
 )
@@ -179,6 +211,41 @@ export const playUris = createServerFn({ method: 'POST' })
         ok: false as const,
         status: res?.status ?? 500,
         message: 'Play request failed',
+      }
+    return { ok: true as const, status: 204 }
+  })
+
+// Start playback for a context (playlist/album/artist) with optional offset
+export const playContext = createServerFn({ method: 'POST' })
+  .validator(
+    (body: {
+      contextUri: string
+      offset?: { uri?: string; position?: number }
+      positionMs?: number
+    }) => body,
+  )
+  .handler(async ({ data }) => {
+    const payload: Record<string, unknown> = {
+      context_uri: data.contextUri,
+    }
+    if (
+      data.offset &&
+      (typeof data.offset.position === 'number' || data.offset.uri)
+    ) {
+      payload.offset = data.offset
+    }
+    if (typeof data.positionMs === 'number') {
+      payload.position_ms = data.positionMs
+    }
+    const { res } = await authFetch('/me/player/play', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+    if (!res || !res.ok)
+      return {
+        ok: false as const,
+        status: res?.status ?? 500,
+        message: 'Play context failed',
       }
     return { ok: true as const, status: 204 }
   })

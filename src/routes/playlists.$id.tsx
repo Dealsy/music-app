@@ -13,13 +13,14 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import {
-  getPlaybackState,
-  playUris,
+  playContext,
   pausePlayback,
   startResumePlayback,
 } from '../server/spotify-player'
+import usePlayer from '@/hooks/use-player'
+import { transferPlayback } from '../server/spotify-player'
 
 export const Route = createFileRoute('/playlists/$id')({
   loader: async ({ params }) => {
@@ -56,24 +57,18 @@ function PlaylistDetail() {
     queryKey: ['collections-list'],
     queryFn: async () => fetch('/api/collections').then((r) => r.json()),
   })
-  const playerQ = useQuery({
-    queryKey: ['player-state'],
-    queryFn: async () => {
-      const r = await getPlaybackState()
-      if (!r.ok) return null
-      return r.state as any
-    },
-    refetchInterval: 1000,
-  })
-  const handlePlayPauseClick = (trackUri?: string) => {
+  // Use global player state from footer hook to avoid duplicate polling
+  const player = usePlayer()
+  const playerQ = player.stateQ as any
+  const handlePlayPauseClick = (trackUri?: string, index?: number) => {
     const isCurrent = playerQ.data?.item?.uri === trackUri
     const isPlaying = Boolean(playerQ.data?.is_playing)
     if (isCurrent && isPlaying) {
       pauseMut.mutate()
     } else if (isCurrent && !isPlaying) {
       resumeMut.mutate()
-    } else if (trackUri) {
-      playMut.mutate(trackUri)
+    } else if (typeof index === 'number') {
+      playMut.mutate(index)
     }
   }
   const pauseMut = useMutation({
@@ -93,38 +88,28 @@ function PlaylistDetail() {
     onSettled: () => playerQ.refetch(),
   })
   const playMut = useMutation({
-    mutationFn: async (uri: string) => {
-      const r = await playUris({ data: { uris: [uri] } })
+    mutationFn: async (index: number) => {
+      // Ensure there is an active device before starting context playback
+      const devices = (player.devicesQ.data as any[]) ?? []
+      const active = devices.find((d) => d.is_active)
+      if (!active) {
+        const deviceId = player.sdkDeviceId || devices[0]?.id
+        if (deviceId) {
+          await transferPlayback({ data: { deviceId, play: false } })
+        }
+      }
+      const r = await playContext({
+        data: {
+          contextUri:
+            data.playlist?.uri ?? `spotify:playlist:${data.playlist.id}`,
+          offset: { position: index },
+        },
+      })
       if (!r.ok) throw new Error(r.message)
       return r
     },
     onSettled: () => playerQ.refetch(),
   })
-  // Auto-advance to next track when the current one ends (for this playlist)
-  const lastAdvancedUriRef = useRef<string | null>(null)
-  useEffect(() => {
-    const state = playerQ.data as any
-    if (!state?.item) return
-    const currentUri: string | undefined = state.item?.uri
-    const durationMs: number | undefined = state.item?.duration_ms
-    const progressMs: number | undefined = state.progress_ms
-    if (!currentUri || !durationMs || typeof progressMs !== 'number') return
-    const currentIndex = tracks.findIndex(
-      (t: any) => t.track?.uri === currentUri,
-    )
-    if (currentIndex === -1) return
-    const nearEnd = progressMs >= durationMs - 1500
-    if (!state.is_playing && nearEnd) {
-      if (lastAdvancedUriRef.current === currentUri) return
-      const nextUri: string | undefined = tracks[currentIndex + 1]?.track?.uri
-      if (nextUri) {
-        lastAdvancedUriRef.current = currentUri
-        playMut.mutate(nextUri)
-      }
-    } else if (state.is_playing && currentUri !== lastAdvancedUriRef.current) {
-      lastAdvancedUriRef.current = null
-    }
-  }, [playerQ.data, tracks, playMut])
 
   const formatMs = (ms: number) => {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000))
@@ -180,7 +165,7 @@ function PlaylistDetail() {
                   size="icon"
                   variant={isCurrent && isPlaying ? 'default' : 'outline'}
                   className="rounded-full w-8 h-8"
-                  onClick={() => handlePlayPauseClick(trackUri)}
+                  onClick={() => handlePlayPauseClick(trackUri, idx)}
                   title="Play/Pause"
                 >
                   {isCurrent && isPlaying ? '❚❚' : '▶'}

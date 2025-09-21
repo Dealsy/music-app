@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useForm } from '@tanstack/react-form'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const Route = createFileRoute('/collections/')({
   component: CollectionsPage,
@@ -62,6 +63,13 @@ function CollectionsPage() {
       </form>
 
       <div className="grid gap-2">
+        {!listQ.data && (
+          <div className="grid gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 rounded" />
+            ))}
+          </div>
+        )}
         {listQ.data?.map?.((c: any) => (
           <div
             key={c._id}
